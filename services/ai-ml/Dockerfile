@@ -1,12 +1,29 @@
 FROM python:3.11-slim
 
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py .
+# Copy application code
+COPY app.py .
+COPY app/ ./app/
 
+# Create model cache directory
+RUN mkdir -p /models
+
+# Expose port
 EXPOSE 8000
 
-CMD ["python", "main.py"]
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV MODEL_CACHE_DIR=/models
+
+# Run the application
+CMD ["python", "app.py"]

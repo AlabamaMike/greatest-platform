@@ -1,6 +1,32 @@
+# Core Framework
 fastapi==0.109.0
-uvicorn==0.27.0
+uvicorn[standard]==0.27.0
 pydantic==2.5.0
+pydantic-settings==2.1.0
 python-multipart==0.0.6
+python-dotenv==1.0.0
+
+# ML Core
 torch==2.1.2
 transformers==4.36.2
+sentence-transformers==2.3.1
+sentencepiece==0.1.99
+
+# Infrastructure
+redis==5.0.1
+aiokafka==0.10.0
+minio==7.2.0
+
+# Computer Vision
+Pillow==10.1.0
+
+# Utilities
+tenacity==8.2.3
+
+# Monitoring (optional)
+prometheus-client==0.19.0
+
+# Development (optional)
+pytest==7.4.3
+pytest-asyncio==0.23.2
+httpx==0.26.0
