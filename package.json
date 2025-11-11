@@ -1,0 +1,66 @@
+{
+  "name": "nexus-platform",
+  "version": "1.0.0",
+  "description": "The greatest software platform - addressing global challenges in healthcare, education, economic empowerment, and crisis response",
+  "main": "index.js",
+  "scripts": {
+    "dev": "docker-compose up",
+    "dev:services": "concurrently \"npm run dev:auth\" \"npm run dev:healthcare\" \"npm run dev:education\" \"npm run dev:economic\" \"npm run dev:data\" \"npm run dev:crisis\"",
+    "dev:auth": "cd services/auth && npm run dev",
+    "dev:healthcare": "cd services/healthcare && npm run dev",
+    "dev:education": "cd services/education && npm run dev",
+    "dev:economic": "cd services/economic && npm run dev",
+    "dev:data": "cd services/data-analytics && npm run dev",
+    "dev:crisis": "cd services/crisis && npm run dev",
+    "build": "lerna run build",
+    "test": "lerna run test",
+    "test:integration": "jest --config jest.integration.config.js",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "prepare": "husky install",
+    "deploy:dev": "kubectl apply -f infrastructure/kubernetes/dev/",
+    "deploy:staging": "kubectl apply -f infrastructure/kubernetes/staging/",
+    "deploy:prod": "kubectl apply -f infrastructure/kubernetes/prod/"
+  },
+  "keywords": [
+    "healthcare",
+    "education",
+    "economic-empowerment",
+    "crisis-response",
+    "sdg",
+    "humanitarian",
+    "open-source",
+    "microservices"
+  ],
+  "author": "Nexus Foundation",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nexus-foundation/nexus-platform"
+  },
+  "workspaces": [
+    "services/*",
+    "web/*",
+    "shared/*"
+  ],
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "concurrently": "^8.0.0",
+    "eslint": "^8.40.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-import": "^2.27.0",
+    "husky": "^8.0.0",
+    "jest": "^29.5.0",
+    "lerna": "^7.0.0",
+    "prettier": "^3.0.0",
+    "ts-jest": "^29.1.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
