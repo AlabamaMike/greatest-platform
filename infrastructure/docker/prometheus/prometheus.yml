@@ -1,0 +1,27 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'nexus-services'
+    static_configs:
+      - targets:
+          - 'auth-service:3000'
+          - 'healthcare-service:3000'
+          - 'education-service:3000'
+          - 'economic-service:3000'
+          - 'data-analytics-service:8000'
+          - 'crisis-service:8080'
+
+  - job_name: 'infrastructure'
+    static_configs:
+      - targets:
+          - 'postgres:5432'
+          - 'mongodb:27017'
+          - 'redis:6379'
+          - 'kafka:9092'
+
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets:
+          - 'api-gateway:8001'
