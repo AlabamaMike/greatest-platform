@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  crisis:
+    build: .
+    ports:
+      - "3007:3007"
+    environment:
+      - PORT=3007
+      - NODE_ENV=development
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=nexus
+      - DB_PASSWORD=nexus_secure_pass
+      - DB_NAME=nexus_crisis
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - KAFKA_BROKERS=kafka:9092
+      - KAFKA_TOPIC_PREFIX=nexus.crisis
+      - WS_ENABLED=true
+      - ALERT_BROADCAST_ENABLED=true
+    depends_on:
+      - postgres
+      - redis
+      - kafka
+    networks:
+      - nexus-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=nexus
+      - POSTGRES_PASSWORD=nexus_secure_pass
+      - POSTGRES_DB=nexus_crisis
+    volumes:
+      - crisis-postgres-data:/var/lib/postgresql/data
+    networks:
+      - nexus-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - crisis-redis-data:/data
+    networks:
+      - nexus-network
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+    depends_on:
+      - zookeeper
+    networks:
+      - nexus-network
+    restart: unless-stopped
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - nexus-network
+    restart: unless-stopped
+
+volumes:
+  crisis-postgres-data:
+  crisis-redis-data:
+
+networks:
+  nexus-network:
+    driver: bridge
