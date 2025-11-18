@@ -1,0 +1,65 @@
+codecov:
+  require_ci_to_pass: yes
+  notify:
+    wait_for_ci: yes
+
+coverage:
+  precision: 2
+  round: down
+  range: "70...100"
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+        if_ci_failed: error
+    patch:
+      default:
+        target: 70%
+        threshold: 5%
+
+comment:
+  layout: "header, diff, flags, components, footer"
+  behavior: default
+  require_changes: false
+
+flags:
+  auth:
+    paths:
+      - services/auth/
+  healthcare:
+    paths:
+      - services/healthcare/
+  economic:
+    paths:
+      - services/economic/
+  education:
+    paths:
+      - services/education/
+  data-analytics:
+    paths:
+      - services/data-analytics/
+  crisis:
+    paths:
+      - services/crisis/
+
+component_management:
+  individual_components:
+    - component_id: auth-service
+      paths:
+        - services/auth/**
+    - component_id: healthcare-service
+      paths:
+        - services/healthcare/**
+    - component_id: economic-service
+      paths:
+        - services/economic/**
+    - component_id: education-service
+      paths:
+        - services/education/**
+    - component_id: data-analytics-service
+      paths:
+        - services/data-analytics/**
+    - component_id: crisis-service
+      paths:
+        - services/crisis/**
