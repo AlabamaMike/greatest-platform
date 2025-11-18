@@ -14,8 +14,8 @@ export const config = {
 
   // JWT
   jwtSecret: process.env.JWT_SECRET || 'dev_jwt_secret_change_in_production',
-  jwtExpiry: process.env.JWT_EXPIRY || '7d',
-  refreshTokenExpiry: process.env.REFRESH_TOKEN_EXPIRY || '30d',
+  jwtExpiry: (process.env.JWT_EXPIRY || '7d') as string,
+  refreshTokenExpiry: (process.env.REFRESH_TOKEN_EXPIRY || '30d') as string,
 
   // Kafka
   kafkaBrokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
