@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from '../config';
 import { DatabaseService } from '../services/database.service';
@@ -351,13 +351,16 @@ export class AuthController {
    * Generate JWT access and refresh tokens
    */
   private async generateTokens(userId: string): Promise<{ accessToken: string; refreshToken: string }> {
-    const accessToken = jwt.sign({ userId, type: 'access' }, config.jwtSecret, {
-      expiresIn: config.jwtExpiry,
-    });
+    const accessTokenOptions: SignOptions = {
+      expiresIn: config.jwtExpiry as any,
+    };
 
-    const refreshToken = jwt.sign({ userId, type: 'refresh' }, config.jwtSecret, {
-      expiresIn: config.refreshTokenExpiry,
-    });
+    const refreshTokenOptions: SignOptions = {
+      expiresIn: config.refreshTokenExpiry as any,
+    };
+
+    const accessToken = jwt.sign({ userId, type: 'access' }, config.jwtSecret, accessTokenOptions);
+    const refreshToken = jwt.sign({ userId, type: 'refresh' }, config.jwtSecret, refreshTokenOptions);
 
     return { accessToken, refreshToken };
   }
