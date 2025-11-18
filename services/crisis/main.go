@@ -1,315 +1,189 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
 	"log"
-	"net/http"
-	"time"
+	"os"
+	"os/signal"
+	"syscall"
 
-	"github.com/gorilla/mux"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/websocket/v2"
+	"github.com/nexus-platform/crisis-service/config"
+	"github.com/nexus-platform/crisis-service/database"
+	"github.com/nexus-platform/crisis-service/handlers"
+	"github.com/nexus-platform/crisis-service/models"
+	"github.com/nexus-platform/crisis-service/services"
 )
 
-type HealthResponse struct {
-	Status    string `json:"status"`
-	Service   string `json:"service"`
-	Timestamp string `json:"timestamp"`
+
+func main() {
+	// Load configuration
+	cfg := config.Load()
+
+	// Initialize Fiber app
+	app := fiber.New(fiber.Config{
+		AppName:      "Nexus Crisis Response Service",
+		ServerHeader: "Nexus-Crisis",
+		ErrorHandler: errorHandler,
+	})
+
+	// Middleware
+	app.Use(recover.New())
+	app.Use(logger.New(logger.Config{
+		Format: "[${time}] ${status} - ${method} ${path} (${latency})\n",
+	}))
+	app.Use(cors.New(cors.Config{
+		AllowOrigins: "*",
+		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
+		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+	}))
+
+	// Initialize services
+	log.Println("🚀 Starting Nexus Crisis Response Service...")
+
+	// Database
+	if err := database.Connect(cfg); err != nil {
+		log.Fatalf("❌ Database connection failed: %v", err)
+	}
+
+	if err := database.Migrate(); err != nil {
+		log.Fatalf("❌ Database migration failed: %v", err)
+	}
+
+	// Redis
+	if err := services.InitRedis(cfg); err != nil {
+		log.Printf("⚠️  Redis connection failed: %v (continuing without cache)", err)
+	}
+
+	// Kafka
+	services.InitKafka(cfg)
+
+	// WebSocket
+	if cfg.WSEnabled {
+		handlers.InitWebSocket()
+	}
+
+	// Routes
+	setupRoutes(app, cfg)
+
+	// Graceful shutdown
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+		<-sigChan
+
+		log.Println("\n🛑 Shutting down gracefully...")
+
+		// Cleanup
+		if services.Kafka != nil {
+			services.Kafka.Close()
+		}
+		if services.Redis != nil {
+			services.Redis.Close()
+		}
+		database.Close()
+
+		app.Shutdown()
+		os.Exit(0)
+	}()
+
+	// Start server
+	log.Printf("✅ Server ready on port %s", cfg.Port)
+	log.Println("🆘 Real-time crisis mapping - Coordinating emergency response!")
+	log.Println("🗺️  Features: Incident reporting, Resource coordination, Early warnings, Volunteer management")
+
+	if err := app.Listen(":" + cfg.Port); err != nil {
+		log.Fatalf("❌ Server failed to start: %v", err)
+	}
 }
 
-type Incident struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Description string    `json:"description"`
-	Location    Location  `json:"location"`
-	Severity    string    `json:"severity"`
-	Status      string    `json:"status"`
-	ReportedBy  string    `json:"reported_by"`
-	ReportedAt  time.Time `json:"reported_at"`
-	Verified    bool      `json:"verified"`
-}
+func setupRoutes(app *fiber.App, cfg *config.Config) {
+	// Health check
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":    "healthy",
+			"service":   "crisis-response-service",
+			"version":   "1.0.0",
+			"timestamp": c.Context().Time().Format("2006-01-02T15:04:05Z07:00"),
+		})
+	})
 
-type Location struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
-	Address   string  `json:"address"`
-}
+	// API v1 routes
+	api := app.Group("/api/v1/crisis")
 
-type Resource struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Quantity int    `json:"quantity"`
-	Location string `json:"location"`
-	Status   string `json:"status"`
-}
+	// Incidents
+	api.Post("/incidents", handlers.CreateIncident)
+	api.Get("/incidents", handlers.GetIncidents)
+	api.Get("/incidents/:id", handlers.GetIncident)
+	api.Patch("/incidents/:id", handlers.UpdateIncident)
+	api.Post("/incidents/:id/verify", handlers.VerifyIncident)
+	api.Post("/incidents/:id/updates", handlers.AddIncidentUpdate)
+	api.Get("/incidents/:id/resources", handlers.GetResourcesByIncident)
+	api.Get("/incidents/:id/volunteers", handlers.GetVolunteersByIncident)
 
-type Alert struct {
-	ID          string    `json:"id"`
-	Type        string    `json:"type"`
-	Message     string    `json:"message"`
-	Severity    string    `json:"severity"`
-	AffectedAreas []string `json:"affected_areas"`
-	IssuedAt    time.Time `json:"issued_at"`
-	ExpiresAt   time.Time `json:"expires_at"`
-}
+	// Crisis Map
+	api.Get("/map", handlers.GetMapData)
 
-// Health check endpoint
-func healthHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(HealthResponse{
-		Status:    "healthy",
-		Service:   "crisis-service",
-		Timestamp: time.Now().Format(time.RFC3339),
+	// Resources
+	api.Post("/resources", handlers.RegisterResource)
+	api.Get("/resources", handlers.GetResources)
+	api.Post("/resources/:id/deploy", handlers.DeployResource)
+
+	// Alerts (CAP-compliant)
+	api.Post("/alerts", handlers.CreateAlert)
+	api.Get("/alerts", handlers.GetAlerts)
+	api.Get("/alerts/:id", handlers.GetAlert)
+	api.Post("/alerts/:id/cancel", handlers.CancelAlert)
+
+	// Volunteers
+	api.Post("/volunteers", handlers.RegisterVolunteer)
+	api.Get("/volunteers", handlers.GetVolunteers)
+	api.Get("/volunteers/:id", handlers.GetVolunteer)
+	api.Post("/volunteers/:id/deploy", handlers.DeployVolunteer)
+	api.Patch("/volunteers/:id/availability", handlers.UpdateVolunteerAvailability)
+	api.Post("/volunteers/match", handlers.MatchVolunteers)
+
+	// WebSocket
+	if cfg.WSEnabled {
+		app.Get("/ws", websocket.New(handlers.HandleWebSocket))
+		api.Get("/ws/stats", handlers.GetWebSocketStats)
+	}
+
+	// Stats and analytics
+	api.Get("/stats", func(c *fiber.Ctx) error {
+		// Get counts from database
+		var incidentCount, resourceCount, volunteerCount, alertCount int64
+		database.DB.Model(&models.Incident{}).Count(&incidentCount)
+		database.DB.Model(&models.Resource{}).Count(&resourceCount)
+		database.DB.Model(&models.Volunteer{}).Count(&volunteerCount)
+		database.DB.Model(&models.Alert{}).Count(&alertCount)
+
+		return c.JSON(fiber.Map{
+			"success": true,
+			"data": fiber.Map{
+				"total_incidents":   incidentCount,
+				"total_resources":   resourceCount,
+				"total_volunteers":  volunteerCount,
+				"total_alerts":      alertCount,
+				"websocket_enabled": cfg.WSEnabled,
+			},
+		})
 	})
 }
 
-// Report crisis incident
-func reportIncidentHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+func errorHandler(c *fiber.Ctx, err error) error {
+	code := fiber.StatusInternalServerError
 
-	incident := Incident{
-		ID:         fmt.Sprintf("inc_%d", time.Now().Unix()),
-		Status:     "reported",
-		Verified:   false,
-		ReportedAt: time.Now(),
+	if e, ok := err.(*fiber.Error); ok {
+		code = e.Code
 	}
 
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Incident reported - awaiting verification (crowdsourced)",
-		"data":    incident,
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Get crisis map data
-func getCrisisMapHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	incidents := []map[string]interface{}{
-		{
-			"id":       "inc_001",
-			"type":     "earthquake",
-			"severity": "high",
-			"location": map[string]interface{}{"lat": 35.6762, "lng": 139.6503, "name": "Tokyo, Japan"},
-			"verified": true,
-		},
-		{
-			"id":       "inc_002",
-			"type":     "flood",
-			"severity": "medium",
-			"location": map[string]interface{}{"lat": -1.286389, "lng": 36.817223, "name": "Nairobi, Kenya"},
-			"verified": true,
-		},
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Real-time crisis map (inspired by Ushahidi & HOT)",
-		"data": map[string]interface{}{
-			"incidents":      incidents,
-			"total":          len(incidents),
-			"last_updated":   time.Now().Format(time.RFC3339),
-			"coverage_areas": 145,
-		},
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Register available resources
-func registerResourceHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	resource := Resource{
-		ID:     fmt.Sprintf("res_%d", time.Now().Unix()),
-		Status: "available",
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Resource registered - available for deployment",
-		"data":    resource,
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Get resources matching needs
-func getResourcesHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	resources := []map[string]interface{}{
-		{
-			"id":       "res_001",
-			"type":     "medical_supplies",
-			"quantity": 500,
-			"location": "Warehouse A, Nairobi",
-			"status":   "available",
-			"can_deploy_to": []string{"Region X", "Region Y"},
-		},
-		{
-			"id":       "res_002",
-			"type":     "volunteers",
-			"quantity": 120,
-			"location": "Multiple locations",
-			"status":   "mobilizing",
-			"skills":   []string{"medical", "logistics", "translation"},
-		},
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Available resources for crisis response",
-		"data":    resources,
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Register as volunteer
-func registerVolunteerHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Volunteer registration successful",
-		"data": map[string]interface{}{
-			"volunteer_id":     fmt.Sprintf("vol_%d", time.Now().Unix()),
-			"status":           "registered",
-			"deployment_zones": []string{"Zone A", "Zone B"},
-			"training_required": []string{"Crisis response basics", "Communication protocols"},
-		},
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Get active alerts
-func getAlertsHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	alerts := []Alert{
-		{
-			ID:            "alert_001",
-			Type:          "earthquake",
-			Message:       "Earthquake detected - Magnitude 6.5",
-			Severity:      "high",
-			AffectedAreas: []string{"Tokyo Metropolitan Area"},
-			IssuedAt:      time.Now().Add(-2 * time.Hour),
-			ExpiresAt:     time.Now().Add(22 * time.Hour),
-		},
-		{
-			ID:            "alert_002",
-			Type:          "flood_warning",
-			Message:       "Heavy rainfall expected - Flood risk",
-			Severity:      "medium",
-			AffectedAreas: []string{"Coastal Region A", "River Basin B"},
-			IssuedAt:      time.Now().Add(-30 * time.Minute),
-			ExpiresAt:     time.Now().Add(23*time.Hour + 30*time.Minute),
-		},
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Active crisis alerts (CAP compliant)",
-		"data":    alerts,
-		"count":   len(alerts),
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Issue new alert
-func issueAlertHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	alert := Alert{
-		ID:       fmt.Sprintf("alert_%d", time.Now().Unix()),
-		IssuedAt: time.Now(),
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Alert issued - distributing via SMS, push, email",
-		"data":    alert,
-		"channels": map[string]interface{}{
-			"sms_sent":   12450,
-			"push_sent":  45230,
-			"email_sent": 23100,
-		},
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Early warning predictions
-func predictCrisisHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "AI-powered early warning prediction",
-		"data": map[string]interface{}{
-			"prediction_type": "flood_risk",
-			"probability":     0.68,
-			"timeframe":       "Next 48-72 hours",
-			"affected_areas":  []string{"River Basin A", "Coastal Zone B"},
-			"recommended_actions": []string{
-				"Activate emergency response teams",
-				"Pre-position relief supplies",
-				"Issue public warnings",
-				"Evacuate high-risk areas",
-			},
-			"confidence":     "high",
-			"model_accuracy": 0.87,
-		},
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-// Family reunification
-func familyReunificationHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
-	response := map[string]interface{}{
-		"success": true,
-		"message": "Family reunification service for displaced persons",
-		"data": map[string]interface{}{
-			"search_id":       fmt.Sprintf("search_%d", time.Now().Unix()),
-			"matches_found":   3,
-			"verification_required": true,
-			"matches": []map[string]interface{}{
-				{"id": "p_001", "name": "John D.", "age": 35, "last_seen": "Region X", "match_confidence": 0.92},
-				{"id": "p_002", "name": "Jane D.", "age": 8, "last_seen": "Shelter A", "match_confidence": 0.88},
-			},
-		},
-	}
-
-	json.NewEncoder(w).Encode(response)
-}
-
-func main() {
-	r := mux.NewRouter()
-
-	// Routes
-	r.HandleFunc("/health", healthHandler).Methods("GET")
-	r.HandleFunc("/api/v1/crisis/incidents", reportIncidentHandler).Methods("POST")
-	r.HandleFunc("/api/v1/crisis/incidents", getAlertsHandler).Methods("GET")
-	r.HandleFunc("/api/v1/crisis/map", getCrisisMapHandler).Methods("GET")
-	r.HandleFunc("/api/v1/crisis/resources", registerResourceHandler).Methods("POST")
-	r.HandleFunc("/api/v1/crisis/resources", getResourcesHandler).Methods("GET")
-	r.HandleFunc("/api/v1/crisis/volunteers", registerVolunteerHandler).Methods("POST")
-	r.HandleFunc("/api/v1/crisis/alerts", getAlertsHandler).Methods("GET")
-	r.HandleFunc("/api/v1/crisis/alerts", issueAlertHandler).Methods("POST")
-	r.HandleFunc("/api/v1/crisis/predict", predictCrisisHandler).Methods("POST")
-	r.HandleFunc("/api/v1/crisis/family-reunification", familyReunificationHandler).Methods("POST")
-
-	port := "8080"
-	fmt.Printf("🆘 Crisis Response Service running on port %s\n", port)
-	fmt.Println("🚨 Real-time crisis mapping - Saving lives during emergencies!")
-
-	log.Fatal(http.ListenAndServe(":"+port, r))
+	return c.Status(code).JSON(fiber.Map{
+		"success": false,
+		"error":   err.Error(),
+		"code":    code,
+	})
 }
