@@ -3,12 +3,39 @@ from pydantic import BaseModel
 from typing import List, Dict, Optional
 from datetime import datetime
 import uvicorn
+import logging
+from database import db_service
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Nexus Data & Analytics Service",
     description="Real-time SDG tracking, open data platform, and evidence-based policy analytics",
     version="1.0.0"
 )
+
+# Startup event
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database connection on startup"""
+    try:
+        await db_service.connect()
+        logger.info("✅ Data Analytics Service initialized")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize service: {e}")
+        raise
+
+# Shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection on shutdown"""
+    await db_service.disconnect()
+    logger.info("Data Analytics Service shut down")
 
 # Models
 class SDGIndicator(BaseModel):

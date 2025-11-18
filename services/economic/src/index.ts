@@ -1,12 +1,16 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import { config } from './config';
+import { logger } from './utils/logger';
+import { DatabaseService } from './services/database.service';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = config.port;
+const db = new DatabaseService();
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({ origin: config.corsOrigin }));
 app.use(express.json());
 
 app.get('/health', (req, res) => {
@@ -129,7 +133,34 @@ app.post('/api/v1/economic/skills-match', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`💼 Economic Service running on port ${PORT}`);
-  console.log('💰 Empowering economic opportunity - Lifting millions out of poverty!');
+// Start server
+async function start() {
+  try {
+    // Connect to database
+    await db.connect();
+    logger.info('Database initialized');
+
+    app.listen(PORT, () => {
+      logger.info(`💼 Economic Service running on port ${PORT}`);
+      logger.info('💰 Empowering economic opportunity - Lifting millions out of poverty!');
+    });
+  } catch (error) {
+    logger.error('Failed to start server', error);
+    process.exit(1);
+  }
+}
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  logger.info('SIGTERM signal received: closing server');
+  await db.disconnect();
+  process.exit(0);
 });
+
+process.on('SIGINT', async () => {
+  logger.info('SIGINT signal received: closing server');
+  await db.disconnect();
+  process.exit(0);
+});
+
+start();
