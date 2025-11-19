@@ -1,17 +1,19 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/tests/e2e'],
-  testMatch: ['**/*.e2e.test.ts'],
+  roots: ['<rootDir>/tests/integration', '<rootDir>/tests/e2e'],
+  testMatch: ['**/*.integration.test.ts', '**/*.e2e.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json', 'node'],
   collectCoverageFrom: [
     'services/**/src/**/*.{ts,tsx}',
     '!services/**/src/**/*.d.ts',
     '!services/**/src/**/index.ts',
+    '!**/node_modules/**',
+    '!**/dist/**',
   ],
-  coverageDirectory: 'coverage/e2e',
+  coverageDirectory: 'coverage/integration',
   coverageReporters: ['text', 'lcov', 'html'],
-  testTimeout: 30000,
+  testTimeout: 60000,
   verbose: true,
   forceExit: true,
   clearMocks: true,
@@ -19,7 +21,7 @@ module.exports = {
   restoreMocks: true,
   maxWorkers: 1,
   runInBand: true,
-  setupFilesAfterEnv: ['<rootDir>/tests/e2e/setup.ts'],
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js', '<rootDir>/tests/e2e/setup.ts'],
   globalTeardown: '<rootDir>/tests/e2e/teardown.ts',
   transform: {
     '^.+\\.tsx?$': [

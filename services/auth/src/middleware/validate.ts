@@ -23,3 +23,6 @@ export const validateRequest = (schema: Joi.ObjectSchema) => {
     next();
   };
 };
+
+// Export alias for backward compatibility
+export const validate = validateRequest;

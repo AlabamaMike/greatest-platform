@@ -1,15 +1,24 @@
 # Dependencies
 node_modules/
 */node_modules/
-package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # Build outputs
 dist/
 build/
 *.js.map
 *.d.ts.map
+*.tsbuildinfo
 
-# Environment files
+# Coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Environment variables
 .env
 .env.local
 .env.*.local
@@ -28,17 +37,11 @@ Thumbs.db
 # Logs
 logs/
 *.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 lerna-debug.log*
 
-# Testing
-coverage/
-.nyc_output/
-*.lcov
-
 # Temporary files
+tmp/
+temp/
 *.tmp
 *.temp
 .cache/
@@ -64,7 +67,6 @@ ENV/
 *.exe
 *.exe~
 *.dll
-*.so
 *.dylib
 
 # Database
@@ -74,3 +76,6 @@ ENV/
 
 # Kubernetes
 *.kubeconfig
+
+# Testing
+.testcontainers/
