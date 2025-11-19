@@ -2,7 +2,6 @@ import request from 'supertest';
 
 describe('Healthcare Service Integration Tests', () => {
   const baseUrl = 'http://localhost:3002';
-  let authToken: string;
 
   beforeAll(async () => {
     // In real scenario, authenticate to get token

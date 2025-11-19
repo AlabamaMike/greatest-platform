@@ -1,5 +1,4 @@
 import request from 'supertest';
-import { TestContainerManager } from './setup';
 
 describe('Auth Service Integration Tests', () => {
   beforeAll(async () => {
